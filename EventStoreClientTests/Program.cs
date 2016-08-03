@@ -54,38 +54,15 @@ namespace EventStoreClientTests
         }
 
 
-        private static void ConsumerEventAppeared(EventStoreCatchUpSubscription eventStoreCatchUpSubscription, ResolvedEvent resolvedEvent)
+        private static void ConsumerEventAppeared(EventStoreCatchUpSubscription arg1, ResolvedEvent arg2)
         {
             count++;
+            router.Tell(new EventStoreEvent() { EventStreamId = arg2.Event.EventStreamId, Data = arg2.Event.Data, EventType = arg2.Event.EventType });
             if (count % 100000 == 0)
             {
                 Console.WriteLine(count);
                 Console.WriteLine(DateTime.Now.Subtract(start));
             }
-            var re = resolvedEvent.Event;
-            var stream = re.EventStreamId;
-            //var streamDetails = EventStreamIdParser.Parse(stream);
-            //Console.WriteLine($"{resolvedEvent.OriginalEventNumber} - ");
-            //if (streamDetails != null)
-            //    switch (streamDetails.Category)
-            //    {
-            //        case "Consumer":
-            //            Console.BackgroundColor = ConsoleColor.Yellow;
-            //            Console.WriteLine($"{resolvedEvent.OriginalPosition} - {streamDetails.Aggregate}");
-            //            Console.BackgroundColor = ConsoleColor.Black;
-            //            break;
-
-            //        case "Sale":
-            //            Console.BackgroundColor = ConsoleColor.Blue;
-            //            Console.WriteLine($"{resolvedEvent.OriginalPosition} - {streamDetails.Aggregate}");
-            //            Console.BackgroundColor = ConsoleColor.Black;
-            //            break;
-            //        default:
-            //            Console.BackgroundColor = ConsoleColor.Red;
-            //            Console.WriteLine($"{resolvedEvent.OriginalPosition} - {streamDetails.Aggregate}");
-            //            Console.BackgroundColor = ConsoleColor.Black;
-            //            break;
-            //    }
         }
     }
 

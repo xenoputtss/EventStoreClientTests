@@ -8,8 +8,8 @@ namespace EventStoreClientTests
     {
         //private IActorRef consumerEventRouter;
         private Guid actorId = Guid.NewGuid();
-        private List<IActorRef> children = new List<IActorRef>(50000);
-
+        //private List<IActorRef> children = new List<IActorRef>(50000);
+        private Int64 count = 0;
         public EventRouterActor()
         {
             //var consumerEventRouterProps = Props.Create(() => new ConsumerAggregateActor()).WithRouter(new RoundRobinPool(5));
@@ -17,10 +17,10 @@ namespace EventStoreClientTests
 
             Receive<ResumeCommand>(e =>
             {
-                foreach (var child in children)
-                {
-                    child.Tell(e);
-                }
+                //foreach (var child in children)
+                //{
+                //    child.Tell(e);
+                //}
             });
 
             Receive<EventStoreEvent>(e =>
@@ -49,8 +49,8 @@ namespace EventStoreClientTests
                     {
                         child = Context.ActorOf(
                             Props.Create(() => new ConsumerAggregateActor(streamDetails.LegacyId + "_" + streamDetails.Aggregate)), aggregateActorName);
-                        children.Add(child);
-                        Console.WriteLine(children.Count + " routees for router " + actorId);
+                        //children.Add(child);
+                        Console.WriteLine(count+++ " routees for router " + actorId);
                     }
 
                     child.Tell(actualEvent);

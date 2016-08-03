@@ -77,6 +77,7 @@ namespace EventStoreClientTests
 
             Receive<ConsumerDomainEvents.Credited>(e =>
             {
+                Console.WriteLine(_adjustBalanceCommand.CurrentAmount);
                 _adjustBalanceCommand = new AdjustBalance(
                     _adjustBalanceCommand.EmployeeId,
                     e.Amount,
