@@ -39,7 +39,7 @@ namespace EventStoreClientTests
                 SubscriptionDropped
                 );
             start = DateTime.Now;
-            Console.ReadKey();
+            while (Console.ReadKey().KeyChar != 'q') { }
         }
 
         private static void SubscriptionDropped(EventStoreCatchUpSubscription arg1, SubscriptionDropReason arg2, Exception arg3)

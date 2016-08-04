@@ -1,133 +1,177 @@
 using System;
+using System.ComponentModel;
 using Akka.Actor;
+using Akka.Dispatch.SysMsg;
+using Akka.Persistence;
 using ConsumerDomainEvents;
 using KioskDirectedMessages.Consumer;
 using Newtonsoft.Json.Linq;
 
 namespace EventStoreClientTests
 {
-    /// <summary>
-    /// Incomming events: 
-    /// * AddedToGroup
-    /// * RemovedFromGroup
-    /// * Debited
-    /// * Credited
-    /// * FingerImgSet
-    /// * FingerImgRemoved
-    ///
-    /// * IsActiveSet
-    /// * Debited
-    /// * Credited
-    /// * UserNameSet
-    /// * CardAdded
-    /// * CardRemoved
-    /// * ScannerIdSet
-    /// * FingerImgSet
-    /// * FingerImgRemoved
-    /// * FirstNameSet
-    /// * LastNameSet
-    /// * EMailAddressSet
-    /// * PinSet
-    /// * MobilePhoneSet
-    /// * ClientAccountSet
-    ///
-    /// Outgoing messages:
-    /// * TODO: Add/Remove group not important here?
-    /// * AdjustBalance
-    /// * AddFingerImageToConsumer
-    /// * RemoveFingerImageFromConsumer
-    /// * UpdateConsumers
-    /// * UpdateBalance
-    /// </summary>
-    class ConsumerAggregateActor : ReceiveActor
+    class ConsumerAggregateData
     {
-        private UpdateConsumer _updateConsumerCommand;
-        private AdjustBalance _adjustBalanceCommand;
-        private AddFingerImageToConsumer _addFingerImageToConsumerCommand;
-        private RemoveFingerImageFromConsumer _removeFingerImageToConsumerCommand;
+        public ConsumerAggregateData(UpdateConsumer consumer, AdjustBalance balance, AddFingerImageToConsumer finger, RemoveFingerImageFromConsumer removeFinger)
+        {
+            UpdateConsumerCommand = consumer;
+            AdjustBalanceCommand = balance;
+            AddFingerImageToConsumerCommand = finger;
+            RemoveFingerImageToConsumerCommand = removeFinger;
+        }
+        public UpdateConsumer UpdateConsumerCommand { get; }
+        public AdjustBalance AdjustBalanceCommand { get; }
+        public AddFingerImageToConsumer AddFingerImageToConsumerCommand { get; }
+        public RemoveFingerImageFromConsumer RemoveFingerImageToConsumerCommand { get; }
         //private UpdateBalance _updateBalance; // TODO: Probably not necessary for distributor if use is mainly to override kiosk balance
+    }
 
+    class ConsumerAggregateActor : ReceivePersistentActor
+    {
+        public override string PersistenceId { get; }
         private bool _isPaused;
+        private int _msgsSinceLastSnapshot = 0;
+
+        private ConsumerAggregateData _consumerAggregateData;
+
 
         public ConsumerAggregateActor(string streamId)
         {
+            this.PersistenceId = streamId;
             _isPaused = true;
 
             var idParts = streamId.Split('_');
             var employeeId = int.Parse(idParts[0]);
             var uniqueId = Guid.Parse(idParts[1]);
-            _updateConsumerCommand = ConsumerUpdateExtensions.CreateDefaultUpdateConsumer(employeeId, uniqueId);
-            _adjustBalanceCommand = new AdjustBalance(streamId, 0M, 0M, Guid.Empty);
-            _addFingerImageToConsumerCommand = new AddFingerImageToConsumer(streamId, null);
-            _removeFingerImageToConsumerCommand = new RemoveFingerImageFromConsumer(streamId, null);
 
+            _consumerAggregateData = new ConsumerAggregateData(
+                ConsumerUpdateExtensions.CreateDefaultUpdateConsumer(employeeId, uniqueId),
+                new AdjustBalance(streamId, 0M, 0M, Guid.Empty),
+                new AddFingerImageToConsumer(streamId, null),
+                new RemoveFingerImageFromConsumer(streamId, null));
 
+            Recover<UpdateConsumer>(e => _consumerAggregateData = new ConsumerAggregateData(e, _consumerAggregateData.AdjustBalanceCommand, _consumerAggregateData.AddFingerImageToConsumerCommand, _consumerAggregateData.RemoveFingerImageToConsumerCommand));
+            Recover<AdjustBalance>(e => _consumerAggregateData = new ConsumerAggregateData(_consumerAggregateData.UpdateConsumerCommand, e, _consumerAggregateData.AddFingerImageToConsumerCommand, _consumerAggregateData.RemoveFingerImageToConsumerCommand));
+            Recover<AddFingerImageToConsumer>(e => _consumerAggregateData = new ConsumerAggregateData(_consumerAggregateData.UpdateConsumerCommand, _consumerAggregateData.AdjustBalanceCommand, e, _consumerAggregateData.RemoveFingerImageToConsumerCommand));
+            Recover<RemoveFingerImageFromConsumer>(e => _consumerAggregateData = new ConsumerAggregateData(_consumerAggregateData.UpdateConsumerCommand, _consumerAggregateData.AdjustBalanceCommand, _consumerAggregateData.AddFingerImageToConsumerCommand, e));
+            Recover<SnapshotOffer>(offer =>
+            {
+                var d = offer.Snapshot as ConsumerAggregateData;
+                if (d != null)
+                    _consumerAggregateData = d;
+            });
+            Command<SaveSnapshotSuccess>(success =>
+            {
+                //DeleteMessages(success.Metadata.SequenceNr);
+            });
+            Command<SaveSnapshotFailure>(failure =>
+            {
+                // handle snapshot save failure...
+                Console.WriteLine(failure.ToString());
+            });
 
-            Receive<ConsumerDomainEvents.AddedToGroup>(e =>
+            Command<ConsumerDomainEvents.AddedToGroup>(e =>
             {
                 // TODO: No reason to do anything with group yet for consumer aggregate
                 //_consumer.ApplyEvent(e);
             });
 
-            Receive<ConsumerDomainEvents.RemovedFromGroup>(e =>
+            Command<ConsumerDomainEvents.RemovedFromGroup>(e =>
             {
                 // TODO: No reason to do anything with group yet for consumer aggregate
                 //_consumer.ApplyEvent(e);
             });
 
-            Receive<ConsumerDomainEvents.Credited>(e =>
+            Command<ConsumerDomainEvents.Credited>(c =>
             {
-                Console.WriteLine(_adjustBalanceCommand.CurrentAmount);
-                _adjustBalanceCommand = new AdjustBalance(
-                    _adjustBalanceCommand.EmployeeId,
-                    e.Amount,
-                    _adjustBalanceCommand.CurrentAmount + e.Amount,
-                    e.CashinUniqueId);
-                IssueCommand(_updateConsumerCommand);
+                //Console.WriteLine(_consumerAggregateData.AdjustBalanceCommand.CurrentAmount);
+
+                var e = new AdjustBalance(
+                     _consumerAggregateData.AdjustBalanceCommand.EmployeeId,
+                    c.Amount,
+                    _consumerAggregateData.AdjustBalanceCommand.CurrentAmount + c.Amount,
+                    c.CashinUniqueId);
+
+                Persist(e, newEvent =>
+                {
+                    _consumerAggregateData = new ConsumerAggregateData(_consumerAggregateData.UpdateConsumerCommand, newEvent, _consumerAggregateData.AddFingerImageToConsumerCommand, _consumerAggregateData.RemoveFingerImageToConsumerCommand);
+                    SnapshotCheck();
+                    //IssueCommand(_updateConsumerCommand);
+                });
             });
 
-            Receive<ConsumerDomainEvents.Debited>(e =>
+            Command<ConsumerDomainEvents.Debited>(c =>
             {
-                _adjustBalanceCommand = new AdjustBalance(
-                    _adjustBalanceCommand.EmployeeId,
-                    e.Amount,
-                    _adjustBalanceCommand.CurrentAmount - e.Amount,
-                    e.SaleUniqueId);
-                IssueCommand(_updateConsumerCommand);
+                var e = new AdjustBalance(
+                    _consumerAggregateData.AdjustBalanceCommand.EmployeeId,
+                    c.Amount,
+                    _consumerAggregateData.AdjustBalanceCommand.CurrentAmount - c.Amount,
+                    c.SaleUniqueId);
+
+                Persist(e, newEvent =>
+                {
+                    _consumerAggregateData = new ConsumerAggregateData(_consumerAggregateData.UpdateConsumerCommand, newEvent, _consumerAggregateData.AddFingerImageToConsumerCommand, _consumerAggregateData.RemoveFingerImageToConsumerCommand);
+                    SnapshotCheck();
+                    //IssueCommand(_updateConsumerCommand);
+                });
             });
 
-            Receive<ConsumerDomainEvents.FingerImgSet>(e =>
+            Command<ConsumerDomainEvents.FingerImgSet>(c =>
             {
-                _addFingerImageToConsumerCommand = new AddFingerImageToConsumer(
-                    _addFingerImageToConsumerCommand.EmployeeId,
-                    e.FingerImg);
-                IssueCommand(_updateConsumerCommand);
+                var e = new AddFingerImageToConsumer(
+                    _consumerAggregateData.AddFingerImageToConsumerCommand.EmployeeId,
+                    c.FingerImg);
+                Persist(e, newEvent =>
+                {
+                    _consumerAggregateData = new ConsumerAggregateData(_consumerAggregateData.UpdateConsumerCommand, _consumerAggregateData.AdjustBalanceCommand, newEvent, _consumerAggregateData.RemoveFingerImageToConsumerCommand);
+                    SnapshotCheck();
+                    //IssueCommand(_updateConsumerCommand);
+                });
             });
 
-            Receive<ConsumerDomainEvents.FingerImgRemoved>(e =>
+            Command<ConsumerDomainEvents.FingerImgRemoved>(c =>
             {
-                _removeFingerImageToConsumerCommand = new RemoveFingerImageFromConsumer(
-                    _addFingerImageToConsumerCommand.EmployeeId,
+                var e = new RemoveFingerImageFromConsumer(
+                    _consumerAggregateData.RemoveFingerImageToConsumerCommand.EmployeeId,
                     null /*HACK: Not used at kiosk*/);
-                IssueCommand(_updateConsumerCommand);
+                Persist(e, newEvent =>
+                {
+                    _consumerAggregateData = new ConsumerAggregateData(_consumerAggregateData.UpdateConsumerCommand, _consumerAggregateData.AdjustBalanceCommand, _consumerAggregateData.AddFingerImageToConsumerCommand, newEvent);
+                    SnapshotCheck();
+                    //IssueCommand(_updateConsumerCommand);
+                });
             });
 
-            Receive<ResumeCommand>(e =>
+            Command<ResumeCommand>(c =>
             {
                 // Unpause the aggregate and forward any accumulated commands
-                _isPaused = false;
-                IssueCommand(this._updateConsumerCommand);
-                IssueCommand(this._adjustBalanceCommand);
-                IssueCommand(this._addFingerImageToConsumerCommand);
-                IssueCommand(this._removeFingerImageToConsumerCommand);
+
+                _isPaused = false;//TODO:  Should this use become/unbecome?
+
+                //IssueCommand(this._updateConsumerCommand);
+                //IssueCommand(this._adjustBalanceCommand);
+                //IssueCommand(this._addFingerImageToConsumerCommand);
+                //IssueCommand(this._removeFingerImageToConsumerCommand);
             });
 
-            ReceiveAny(e =>
+            CommandAny(c =>
             {
                 // OPTIMIZE: Run this only if is subset of events causing UpdateConsumer to change
-                _updateConsumerCommand = ConsumerUpdateExtensions.ToUpdateConsumerCommand(_updateConsumerCommand, e);
-                IssueCommand(_updateConsumerCommand);
+                var e = _consumerAggregateData.UpdateConsumerCommand.ToUpdateConsumerCommand(c);
+                Persist(e, newEvent =>
+                {
+                    _consumerAggregateData = new ConsumerAggregateData(newEvent, _consumerAggregateData.AdjustBalanceCommand, _consumerAggregateData.AddFingerImageToConsumerCommand, _consumerAggregateData.RemoveFingerImageToConsumerCommand);
+                    SnapshotCheck();
+                    //IssueCommand(_updateConsumerCommand);
+                });
             });
+        }
+
+        private void SnapshotCheck()
+        {
+            if (++_msgsSinceLastSnapshot % 100 == 0)
+            {
+                SaveSnapshot(_consumerAggregateData);
+            }
         }
 
         private void IssueCommand(object ouboundCommand)
@@ -137,6 +181,7 @@ namespace EventStoreClientTests
                 Console.WriteLine(JObject.FromObject(ouboundCommand).ToString(Newtonsoft.Json.Formatting.None));
             }
         }
+
     }
 
     public static class ConsumerUpdateExtensions

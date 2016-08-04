@@ -19,3 +19,12 @@ c:\dropbox\projects\personal\EventStoreClientTests\EventStoreClientTests\bin\Deb
 c:\dropbox\projects\personal\EventStoreClientTests\EventStoreClientTests\bin\Debug\Newtonsoft.Json.xml
 c:\dropbox\projects\personal\EventStoreClientTests\EventStoreClientTests\bin\Debug\System.Collections.Immutable.xml
 c:\dropbox\projects\personal\EventStoreClientTests\EventStoreClientTests\bin\Debug\FSharp.Core.xml
+c:\dropbox\projects\personal\EventStoreClientTests\EventStoreClientTests\bin\Debug\Akka.Persistence.dll
+c:\dropbox\projects\personal\EventStoreClientTests\EventStoreClientTests\bin\Debug\Akka.Persistence.Sql.Common.dll
+c:\dropbox\projects\personal\EventStoreClientTests\EventStoreClientTests\bin\Debug\Akka.Persistence.SqlServer.dll
+c:\dropbox\projects\personal\EventStoreClientTests\EventStoreClientTests\bin\Debug\Google.ProtocolBuffers.dll
+c:\dropbox\projects\personal\EventStoreClientTests\EventStoreClientTests\bin\Debug\Google.ProtocolBuffers.Serialization.dll
+c:\dropbox\projects\personal\EventStoreClientTests\EventStoreClientTests\bin\Debug\Akka.Persistence.xml
+c:\dropbox\projects\personal\EventStoreClientTests\EventStoreClientTests\bin\Debug\Akka.Persistence.Sql.Common.xml
+c:\dropbox\projects\personal\EventStoreClientTests\EventStoreClientTests\bin\Debug\Google.ProtocolBuffers.xml
+c:\dropbox\projects\personal\EventStoreClientTests\EventStoreClientTests\bin\Debug\Google.ProtocolBuffers.Serialization.xml
